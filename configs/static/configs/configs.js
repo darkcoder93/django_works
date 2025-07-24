@@ -8,9 +8,18 @@ $(document).ready(function() {
         { value: 'delete', label: 'Delete' }
     ];
 
-    function createSection(idx) {
+    function createSection(idx, categories) {
+        let catSelect = '<select class="form-select category-select" name="category' + idx + '">';
+        categories.forEach(function(cat) {
+            catSelect += `<option value="${cat}">${cat}</option>`;
+        });
+        catSelect += '</select>';
         return `<div class="col-md-4 modal-section" data-section="${idx}">
             <div class="card p-2">
+                <div class="mb-2">
+                    <label>Category</label>
+                    ${catSelect}
+                </div>
                 <div class="mb-2">
                     <label>Operation</label>
                     <select class="form-select operation-select" name="operation${idx}">
@@ -44,10 +53,12 @@ $(document).ready(function() {
         });
     }
 
+    let currentCategories = [];
+
     function resetSections() {
         $('#operationSections').empty();
         sectionCount = 1;
-        $('#operationSections').append(createSection(1));
+        $('#operationSections').append(createSection(1, currentCategories));
         updateSectionFields();
     }
 
@@ -83,17 +94,17 @@ $(document).ready(function() {
         $.get('/api/configs/', function(resp) {
             let rec = resp.data.find(r => r.name === selectedRows[0].name);
             let categories = rec && rec.raw_config ? Object.keys(rec.raw_config) : [];
-            updateCategorySelect(categories);
+            currentCategories = categories;
+            resetSections();
+            $('#configModal').modal('show');
         });
-        resetSections();
-        $('#configModal').modal('show');
     });
 
     // Add section
     $('#addSectionBtn').on('click', function() {
         if (sectionCount < maxSections) {
             sectionCount++;
-            $('#operationSections').append(createSection(sectionCount));
+            $('#operationSections').append(createSection(sectionCount, currentCategories));
             updateSectionFields();
         }
     });
@@ -172,58 +183,57 @@ $(document).ready(function() {
     // Preview button logic
     $('#previewBtn').on('click', function() {
         let names = $('#recordName').val().split(',').map(n => n.trim()).filter(Boolean);
-        let category = $('#categorySelect').val();
         if (names.length === 0) {
             alert('No names selected.');
             return;
         }
-        if (!category) {
-            alert('Please select a category.');
-            return;
-        }
         let operations = [];
         $('#operationSections .modal-section').each(function() {
+            let category = $(this).find('.category-select').val();
             let op = $(this).find('.operation-select').val();
             let key = $(this).find('.key-input').val();
             let value = $(this).find('.value-input').val();
             let caseSensitive = $(this).find('.case-checkbox').is(':checked');
-            operations.push({ op, key, value, caseSensitive });
+            operations.push({ category, op, key, value, caseSensitive });
         });
         $.get('/api/configs/', function(resp) {
-            let previewRows = names.map(function(name) {
+            let previewRows = [];
+            names.forEach(function(name) {
                 let rec = resp.data.find(r => r.name === name);
-                let oldConfig = rec && rec.raw_config && rec.raw_config[category] ? rec.raw_config[category] : '';
-                let newConfig = oldConfig;
-                let pairs = oldConfig ? oldConfig.split(';').filter(Boolean).map(s => s.trim().split(' ')) : [];
-                for (let i = 0; i < operations.length; i++) {
-                    let { op, key, value, caseSensitive } = operations[i];
+                let raw_config = rec && rec.raw_config ? rec.raw_config : {};
+                operations.forEach(function(operation) {
+                    let { category, op, key, value, caseSensitive } = operation;
+                    let oldConfig = raw_config[category] || '';
+                    let pairs = oldConfig ? oldConfig.split(';').filter(Boolean).map(s => s.trim().split(' ')) : [];
+                    let newPairs = pairs.map(pair => [...pair]); // deep copy
                     if (op === 'add') {
-                        if (!pairs.some(([k]) => (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()))) {
-                            pairs.push([key, value]);
+                        if (!newPairs.some(([k]) => (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()))) {
+                            newPairs.push([key, value]);
                         }
                     } else if (op === 'edit') {
-                        pairs = pairs.map(([k, v]) => {
+                        newPairs = newPairs.map(([k, v]) => {
                             if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
                                 return [k, value];
                             }
                             return [k, v];
                         });
                     } else if (op === 'append') {
-                        pairs.push([key, value]);
+                        newPairs.push([key, value]);
                     } else if (op === 'delete') {
-                        pairs = pairs.filter(([k]) => !(caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()));
+                        newPairs = newPairs.filter(([k]) => !(caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()));
                     }
-                }
-                newConfig = pairs.map(([k, v]) => k + ' ' + v).join(';');
-                return {
-                    name: name,
-                    old_config: oldConfig,
-                    new_config: colorDiff(oldConfig, newConfig)
-                };
+                    let newConfig = newPairs.map(([k, v]) => k + ' ' + v).join(';');
+                    previewRows.push({
+                        name: name,
+                        category: category,
+                        old_config: oldConfig,
+                        new_config: colorDiff(oldConfig, newConfig)
+                    });
+                });
             });
-            let html = '<table class="table table-bordered"><thead><tr><th>Name</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead><tbody>';
+            let html = '<table class="table table-bordered"><thead><tr><th>Name</th><th>Category</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead><tbody>';
             previewRows.forEach(function(row) {
-                html += `<tr><td>${row.name}</td><td>${row.old_config}</td><td>${row.new_config}</td></tr>`;
+                html += `<tr><td>${row.name}</td><td>${row.category}</td><td>${row.old_config}</td><td>${row.new_config}</td></tr>`;
             });
             html += '</tbody></table>';
             $('#modalPreviewTableContainer').html(html);
@@ -233,33 +243,34 @@ $(document).ready(function() {
     // Submit button (require preview first for clarity)
     $('#submitBtn').on('click', function() {
         let names = $('#recordName').val().split(',').map(n => n.trim()).filter(Boolean);
-        let category = $('#categorySelect').val();
         if (names.length === 0) {
             alert('No names selected.');
             return;
         }
-        if (!category) {
-            alert('Please select a category.');
-            return;
-        }
         let operations = [];
         $('#operationSections .modal-section').each(function() {
+            let category = $(this).find('.category-select').val();
             let op = $(this).find('.operation-select').val();
             let key = $(this).find('.key-input').val();
             let value = $(this).find('.value-input').val();
             let caseSensitive = $(this).find('.case-checkbox').is(':checked');
-            operations.push({ op, key, value, caseSensitive });
+            operations.push({ category, op, key, value, caseSensitive });
         });
         names.forEach(function(name) {
             $.get('/api/configs/', function(resp) {
                 let rec = resp.data.find(r => r.name === name);
                 let oldConfig = rec ? rec.raw_config : {};
                 let newConfig = { ...oldConfig };
-                let configStr = newConfig[category] || '';
-                let pairs = configStr ? configStr.split(';').filter(Boolean).map(s => s.trim().split(' ')) : [];
-                for (let i = 0; i < operations.length; i++) {
-                    let { op, key, value, caseSensitive } = operations[i];
+                operations.forEach(function(operation) {
+                    let { category, op, key, value, caseSensitive } = operation;
+                    let configStr = newConfig[category] || '';
+                    let pairs = configStr ? configStr.split(';').filter(Boolean).map(s => s.trim().split(' ')) : [];
                     if (op === 'add') {
+                        // If category does not exist, create it and add the key-value pair
+                        if (!newConfig[category]) {
+                            newConfig[category] = key + ' ' + value;
+                            return;
+                        }
                         if (!pairs.some(([k]) => (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()))) {
                             pairs.push([key, value]);
                         }
@@ -276,7 +287,7 @@ $(document).ready(function() {
                         pairs = pairs.filter(([k]) => !(caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()));
                     }
                     newConfig[category] = pairs.map(([k, v]) => k + ' ' + v).join(';');
-                }
+                });
                 // Submit to backend
                 $.ajax({
                     url: '/api/update/',

@@ -2,15 +2,17 @@ $(document).ready(function() {
     let sectionCount = 1;
     let maxSections = 3;
     let operationOptions = [
-        { value: 'add', label: 'Add' },
         { value: 'edit', label: 'Edit' },
         { value: 'append', label: 'Append' },
         { value: 'delete', label: 'Delete' }
     ];
 
-    function createSection(idx, categories) {
+    // Constant list of categories
+    let constantCategories = ['config1', 'config2', 'config3', 'config4', 'config5', 'config6', 'config7', 'config8'];
+
+    function createSection(idx) {
         let catSelect = '<select class="form-select category-select" name="category' + idx + '">';
-        categories.forEach(function(cat) {
+        constantCategories.forEach(function(cat) {
             catSelect += `<option value="${cat}">${cat}</option>`;
         });
         catSelect += '</select>';
@@ -45,12 +47,44 @@ $(document).ready(function() {
     function updateSectionFields() {
         $('#operationSections .modal-section').each(function() {
             let op = $(this).find('.operation-select').val();
+            let category = $(this).find('.category-select').val();
+            
             if (op === 'delete') {
                 $(this).find('.value-group').hide();
             } else {
                 $(this).find('.value-group').show();
             }
+            
+            // Show append option only for config8
+            let appendOption = $(this).find('.operation-select option[value="append"]');
+            if (category === 'config8') {
+                appendOption.show();
+            } else {
+                appendOption.hide();
+                if (op === 'append') {
+                    $(this).find('.operation-select').val('edit');
+                }
+            }
         });
+        
+        // Update button visibility based on section count
+        updateButtonVisibility();
+    }
+
+    function updateButtonVisibility() {
+        // Hide + button when max sections reached
+        if (sectionCount >= maxSections) {
+            $('#addSectionBtn').hide();
+        } else {
+            $('#addSectionBtn').show();
+        }
+        
+        // Hide - button when only 1 section remains
+        if (sectionCount <= 1) {
+            $('#removeSectionBtn').hide();
+        } else {
+            $('#removeSectionBtn').show();
+        }
     }
 
     let currentCategories = [];
@@ -58,7 +92,7 @@ $(document).ready(function() {
     function resetSections() {
         $('#operationSections').empty();
         sectionCount = 1;
-        $('#operationSections').append(createSection(1, currentCategories));
+        $('#operationSections').append(createSection(1));
         updateSectionFields();
     }
 
@@ -90,21 +124,26 @@ $(document).ready(function() {
         }
         let names = selectedRows.map(row => row.name).join(', ');
         $('#recordName').val(names);
-        // Get categories from first selected row (assume all have same structure)
-        $.get('/api/configs/', function(resp) {
-            let rec = resp.data.find(r => r.name === selectedRows[0].name);
-            let categories = rec && rec.raw_config ? Object.keys(rec.raw_config) : [];
-            currentCategories = categories;
-            resetSections();
-            $('#configModal').modal('show');
-        });
+        resetSections();
+        $('#configModal').modal('show');
+    });
+
+    // Modal close - reset all data
+    $('#configModal').on('hidden.bs.modal', function() {
+        resetSections();
+        $('#recordName').val('');
+        $('#modalPreviewTableContainer').html('');
+        // Clear all form inputs
+        $('#configForm input[type="text"]').val('');
+        $('#configForm input[type="checkbox"]').prop('checked', false);
+        $('#configForm select').prop('selectedIndex', 0);
     });
 
     // Add section
     $('#addSectionBtn').on('click', function() {
         if (sectionCount < maxSections) {
             sectionCount++;
-            $('#operationSections').append(createSection(sectionCount, currentCategories));
+            $('#operationSections').append(createSection(sectionCount));
             updateSectionFields();
         }
     });
@@ -113,10 +152,15 @@ $(document).ready(function() {
         if (sectionCount > 1) {
             $('#operationSections .modal-section').last().remove();
             sectionCount--;
+            updateSectionFields();
         }
     });
     // Change operation
     $(document).on('change', '.operation-select', function() {
+        updateSectionFields();
+    });
+    // Change category
+    $(document).on('change', '.category-select', function() {
         updateSectionFields();
     });
 
@@ -154,44 +198,18 @@ $(document).ready(function() {
         });
     }
 
-    // Color diff function for preview
-    function colorDiff(oldStr, newStr) {
-        let oldPairs = (oldStr || '').split(';').filter(Boolean).map(s => s.trim());
-        let newPairs = (newStr || '').split(';').filter(Boolean).map(s => s.trim());
-        let oldMap = {};
-        oldPairs.forEach(p => { let [k, v] = p.split(' '); oldMap[k] = v; });
-        let newMap = {};
-        newPairs.forEach(p => { let [k, v] = p.split(' '); newMap[k] = v; });
-        let html = '';
-        for (let k in newMap) {
-            if (!(k in oldMap)) {
-                html += `<span class="added">${k} ${newMap[k]}</span>;`;
-            } else if (oldMap[k] !== newMap[k]) {
-                html += `<span class="edited">${k} ${newMap[k]}</span>;`;
-            } else {
-                html += `${k} ${newMap[k]};`;
-            }
-        }
-        for (let k in oldMap) {
-            if (!(k in newMap)) {
-                html += `<span class="appended">${k} ${oldMap[k]}</span>;`;
-            }
-        }
-        return html;
-    }
-
-    // Helper: Converts a config string to a key-value object
-    function parseConfigString(configStr) {
-        let obj = {};
-        (configStr || '').split(';').filter(Boolean).forEach(pair => {
-            let [k, v] = pair.trim().split(' ');
-            if (k) obj[k] = v;
+    // Collect operations from all sections
+    function collectOperations() {
+        let operations = [];
+        $('#operationSections .modal-section').each(function() {
+            let category = $(this).find('.category-select').val();
+            let op = $(this).find('.operation-select').val();
+            let key = $(this).find('.key-input').val();
+            let value = $(this).find('.value-input').val();
+            let caseSensitive = $(this).find('.case-checkbox').is(':checked');
+            operations.push({ category, op, key, value, caseSensitive });
         });
-        return obj;
-    }
-    // Helper: Converts a key-value object to a config string
-    function stringifyConfigObject(obj) {
-        return Object.entries(obj).map(([k, v]) => k + ' ' + v).join(';');
+        return operations;
     }
 
     // Preview button logic
@@ -201,143 +219,65 @@ $(document).ready(function() {
             alert('No names selected.');
             return;
         }
-        let operations = [];
-        $('#operationSections .modal-section').each(function() {
-            let category = $(this).find('.category-select').val();
-            let op = $(this).find('.operation-select').val();
-            let key = $(this).find('.key-input').val();
-            let value = $(this).find('.value-input').val();
-            let caseSensitive = $(this).find('.case-checkbox').is(':checked');
-            operations.push({ category, op, key, value, caseSensitive });
-        });
-        $.get('/api/configs/', function(resp) {
-            let previewRows = [];
-            names.forEach(function(name) {
-                let rec = resp.data.find(r => r.name === name);
-                let raw_config = rec && rec.raw_config ? rec.raw_config : {};
-                operations.forEach(function(operation) {
-                    let { category, op, key, value, caseSensitive } = operation;
-                    // --- Use object logic ---
-                    let configObj = parseConfigString(raw_config[category] || '');
-                    let newObj = { ...configObj };
-                    if (op === 'add') {
-                        if (!(caseSensitive ? (key in newObj) : Object.keys(newObj).some(k => k.toLowerCase() === key.toLowerCase()))) {
-                            newObj[key] = value;
-                        }
-                    } else if (op === 'edit') {
-                        Object.keys(newObj).forEach(k => {
-                            if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
-                                newObj[k] = value;
-                            }
-                        });
-                    } else if (op === 'append') {
-                        // For append, allow duplicate keys (simulate by adding a new key with suffix if needed)
-                        let appendKey = key;
-                        let i = 2;
-                        while (newObj[appendKey] !== undefined) {
-                            appendKey = key + '_' + i;
-                            i++;
-                        }
-                        newObj[appendKey] = value;
-                    } else if (op === 'delete') {
-                        Object.keys(newObj).forEach(k => {
-                            if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
-                                delete newObj[k];
-                            }
-                        });
-                    }
-                    let oldConfigStr = stringifyConfigObject(configObj);
-                    let newConfigStr = stringifyConfigObject(newObj);
-                    previewRows.push({
-                        name: name,
-                        category: category,
-                        old_config: oldConfigStr,
-                        new_config: colorDiff(oldConfigStr, newConfigStr)
-                    });
+        
+        let operations = collectOperations();
+        if (operations.length === 0) {
+            alert('No operations defined.');
+            return;
+        }
+
+        // Send to Django for preview
+        $.ajax({
+            url: '/api/preview/',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ names, operations }),
+            success: function(data) {
+                let previewRows = data.preview_rows;
+                let html = '<div class="mb-2"><strong>Note:</strong> <span class="added">Added</span> (green), <span class="appended">Appended</span> (pink), <span class="edited">Edited</span> (orange)</div>';
+                html += '<table class="table table-bordered"><thead><tr><th>Name</th><th>Category</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead><tbody>';
+                previewRows.forEach(function(row) {
+                    html += `<tr><td>${row.name}</td><td>${row.category}</td><td>${row.old_config}</td><td>${row.new_config}</td></tr>`;
                 });
-            });
-            let html = '<div class="mb-2"><strong>Note:</strong> <span class="added">Added</span> (green), <span class="appended">Appended</span> (pink), <span class="edited">Edited</span> (orange)</div>';
-            html += '<table class="table table-bordered"><thead><tr><th>Name</th><th>Category</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead><tbody>';
-            previewRows.forEach(function(row) {
-                html += `<tr><td>${row.name}</td><td>${row.category}</td><td>${row.old_config}</td><td>${row.new_config}</td></tr>`;
-            });
-            html += '</tbody></table>';
-            $('#modalPreviewTableContainer').html(html);
+                html += '</tbody></table>';
+                $('#modalPreviewTableContainer').html(html);
+            },
+            error: function(xhr, status, error) {
+                alert('Error generating preview: ' + error);
+            }
         });
     });
 
-    // Submit button (require preview first for clarity)
+    // Submit button
     $('#submitBtn').on('click', function() {
         let names = $('#recordName').val().split(',').map(n => n.trim()).filter(Boolean);
         if (names.length === 0) {
             alert('No names selected.');
             return;
         }
-        let operations = [];
-        $('#operationSections .modal-section').each(function() {
-            let category = $(this).find('.category-select').val();
-            let op = $(this).find('.operation-select').val();
-            let key = $(this).find('.key-input').val();
-            let value = $(this).find('.value-input').val();
-            let caseSensitive = $(this).find('.case-checkbox').is(':checked');
-            operations.push({ category, op, key, value, caseSensitive });
+        
+        let operations = collectOperations();
+        if (operations.length === 0) {
+            alert('No operations defined.');
+            return;
+        }
+
+        // Send to Django for update
+        $.ajax({
+            url: '/api/update/',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ names, operations }),
+            success: function(data) {
+                $('#configModal').modal('hide');
+                $('#modalPreviewTableContainer').html('');
+                updateTable();
+                alert('Configs updated successfully!');
+            },
+            error: function(xhr, status, error) {
+                alert('Error updating configs: ' + error);
+            }
         });
-        names.forEach(function(name) {
-            $.get('/api/configs/', function(resp) {
-                let rec = resp.data.find(r => r.name === name);
-                let oldConfig = rec ? rec.raw_config : {};
-                let newConfig = { ...oldConfig };
-                operations.forEach(function(operation) {
-                    let { category, op, key, value, caseSensitive } = operation;
-                    // --- Use object logic ---
-                    let configObj = parseConfigString(newConfig[category] || '');
-                    let newObj = { ...configObj };
-                    if (op === 'add') {
-                        // If category does not exist, create it and add the key-value pair
-                        if (!newConfig[category]) {
-                            newConfig[category] = stringifyConfigObject({ [key]: value });
-                            return;
-                        }
-                        if (!(caseSensitive ? (key in newObj) : Object.keys(newObj).some(k => k.toLowerCase() === key.toLowerCase()))) {
-                            newObj[key] = value;
-                        }
-                    } else if (op === 'edit') {
-                        Object.keys(newObj).forEach(k => {
-                            if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
-                                newObj[k] = value;
-                            }
-                        });
-                    } else if (op === 'append') {
-                        let appendKey = key;
-                        let i = 2;
-                        while (newObj[appendKey] !== undefined) {
-                            appendKey = key + '_' + i;
-                            i++;
-                        }
-                        newObj[appendKey] = value;
-                    } else if (op === 'delete') {
-                        Object.keys(newObj).forEach(k => {
-                            if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
-                                delete newObj[k];
-                            }
-                        });
-                    }
-                    newConfig[category] = stringifyConfigObject(newObj);
-                });
-                // Submit to backend
-                $.ajax({
-                    url: '/api/update/',
-                    method: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ name, new_config: newConfig }),
-                    success: function(data) {
-                        updateTable();
-                    }
-                });
-            });
-        });
-        $('#configModal').modal('hide');
-        $('#modalPreviewTableContainer').html('');
     });
 
     // Initial table load

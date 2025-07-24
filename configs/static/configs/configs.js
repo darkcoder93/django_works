@@ -180,6 +180,20 @@ $(document).ready(function() {
         return html;
     }
 
+    // Helper: Converts a config string to a key-value object
+    function parseConfigString(configStr) {
+        let obj = {};
+        (configStr || '').split(';').filter(Boolean).forEach(pair => {
+            let [k, v] = pair.trim().split(' ');
+            if (k) obj[k] = v;
+        });
+        return obj;
+    }
+    // Helper: Converts a key-value object to a config string
+    function stringifyConfigObject(obj) {
+        return Object.entries(obj).map(([k, v]) => k + ' ' + v).join(';');
+    }
+
     // Preview button logic
     $('#previewBtn').on('click', function() {
         let names = $('#recordName').val().split(',').map(n => n.trim()).filter(Boolean);
@@ -203,35 +217,47 @@ $(document).ready(function() {
                 let raw_config = rec && rec.raw_config ? rec.raw_config : {};
                 operations.forEach(function(operation) {
                     let { category, op, key, value, caseSensitive } = operation;
-                    let oldConfig = raw_config[category] || '';
-                    let pairs = oldConfig ? oldConfig.split(';').filter(Boolean).map(s => s.trim().split(' ')) : [];
-                    let newPairs = pairs.map(pair => [...pair]); // deep copy
+                    // --- Use object logic ---
+                    let configObj = parseConfigString(raw_config[category] || '');
+                    let newObj = { ...configObj };
                     if (op === 'add') {
-                        if (!newPairs.some(([k]) => (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()))) {
-                            newPairs.push([key, value]);
+                        if (!(caseSensitive ? (key in newObj) : Object.keys(newObj).some(k => k.toLowerCase() === key.toLowerCase()))) {
+                            newObj[key] = value;
                         }
                     } else if (op === 'edit') {
-                        newPairs = newPairs.map(([k, v]) => {
+                        Object.keys(newObj).forEach(k => {
                             if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
-                                return [k, value];
+                                newObj[k] = value;
                             }
-                            return [k, v];
                         });
                     } else if (op === 'append') {
-                        newPairs.push([key, value]);
+                        // For append, allow duplicate keys (simulate by adding a new key with suffix if needed)
+                        let appendKey = key;
+                        let i = 2;
+                        while (newObj[appendKey] !== undefined) {
+                            appendKey = key + '_' + i;
+                            i++;
+                        }
+                        newObj[appendKey] = value;
                     } else if (op === 'delete') {
-                        newPairs = newPairs.filter(([k]) => !(caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()));
+                        Object.keys(newObj).forEach(k => {
+                            if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
+                                delete newObj[k];
+                            }
+                        });
                     }
-                    let newConfig = newPairs.map(([k, v]) => k + ' ' + v).join(';');
+                    let oldConfigStr = stringifyConfigObject(configObj);
+                    let newConfigStr = stringifyConfigObject(newObj);
                     previewRows.push({
                         name: name,
                         category: category,
-                        old_config: oldConfig,
-                        new_config: colorDiff(oldConfig, newConfig)
+                        old_config: oldConfigStr,
+                        new_config: colorDiff(oldConfigStr, newConfigStr)
                     });
                 });
             });
-            let html = '<table class="table table-bordered"><thead><tr><th>Name</th><th>Category</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead><tbody>';
+            let html = '<div class="mb-2"><strong>Note:</strong> <span class="added">Added</span> (green), <span class="appended">Appended</span> (pink), <span class="edited">Edited</span> (orange)</div>';
+            html += '<table class="table table-bordered"><thead><tr><th>Name</th><th>Category</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead><tbody>';
             previewRows.forEach(function(row) {
                 html += `<tr><td>${row.name}</td><td>${row.category}</td><td>${row.old_config}</td><td>${row.new_config}</td></tr>`;
             });
@@ -263,30 +289,40 @@ $(document).ready(function() {
                 let newConfig = { ...oldConfig };
                 operations.forEach(function(operation) {
                     let { category, op, key, value, caseSensitive } = operation;
-                    let configStr = newConfig[category] || '';
-                    let pairs = configStr ? configStr.split(';').filter(Boolean).map(s => s.trim().split(' ')) : [];
+                    // --- Use object logic ---
+                    let configObj = parseConfigString(newConfig[category] || '');
+                    let newObj = { ...configObj };
                     if (op === 'add') {
                         // If category does not exist, create it and add the key-value pair
                         if (!newConfig[category]) {
-                            newConfig[category] = key + ' ' + value;
+                            newConfig[category] = stringifyConfigObject({ [key]: value });
                             return;
                         }
-                        if (!pairs.some(([k]) => (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()))) {
-                            pairs.push([key, value]);
+                        if (!(caseSensitive ? (key in newObj) : Object.keys(newObj).some(k => k.toLowerCase() === key.toLowerCase()))) {
+                            newObj[key] = value;
                         }
                     } else if (op === 'edit') {
-                        pairs = pairs.map(([k, v]) => {
+                        Object.keys(newObj).forEach(k => {
                             if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
-                                return [k, value];
+                                newObj[k] = value;
                             }
-                            return [k, v];
                         });
                     } else if (op === 'append') {
-                        pairs.push([key, value]);
+                        let appendKey = key;
+                        let i = 2;
+                        while (newObj[appendKey] !== undefined) {
+                            appendKey = key + '_' + i;
+                            i++;
+                        }
+                        newObj[appendKey] = value;
                     } else if (op === 'delete') {
-                        pairs = pairs.filter(([k]) => !(caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()));
+                        Object.keys(newObj).forEach(k => {
+                            if (caseSensitive ? k === key : k.toLowerCase() === key.toLowerCase()) {
+                                delete newObj[k];
+                            }
+                        });
                     }
-                    newConfig[category] = pairs.map(([k, v]) => k + ' ' + v).join(';');
+                    newConfig[category] = stringifyConfigObject(newObj);
                 });
                 // Submit to backend
                 $.ajax({

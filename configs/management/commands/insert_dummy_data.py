@@ -9,22 +9,22 @@ class Command(BaseCommand):
             {
                 'name': 'ServerA',
                 'config': {
-                    'category1': 'key1 value1;key2 value2',
-                    'category2': 'key3 value3;key4 value4'
+                    'category1': 'key1 value1;key2 value2;',
+                    'category2': 'key3 value3;key4 value4;'
                 }
             },
             {
                 'name': 'ServerB',
                 'config': {
-                    'category1': 'key5 value5;key6 value6',
-                    'category2': 'key7 value7;key8 value8'
+                    'category1': 'key5 value5;key6 value6;',
+                    'category2': 'key7 value7;key8 value8;'
                 }
             },
             {
                 'name': 'ServerC',
                 'config': {
-                    'category1': 'key9 value9;key10 value10',
-                    'category2': 'key11 value11;key12 value12'
+                    'category1': 'key9 value9;key10 value10;',
+                    'category2': 'key11 value11;key12 value12;'
                 }
             }
         ]

@@ -106,13 +106,34 @@ function setupModalEventHandlers() {
             data: JSON.stringify({ names, operations }),
             success: function(data) {
                 let previewRows = data.preview_rows;
-                let html = '<div class="mb-2"><strong>Note:</strong> <span class="added">Added</span> (green), <span class="appended">Appended</span> (pink), <span class="edited">Edited</span> (orange)</div>';
-                html += '<table class="table table-bordered"><thead><tr><th>Name</th><th>Category</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead><tbody>';
+                let container = $('#modalPreviewTableContainer');
+                
+                console.log('Preview data received:', data);
+                
+                // Clear container
+                container.empty();
+                
+                // Add note section
+                container.append('<div class="mb-2"><strong>Note:</strong> <span class="added">Added</span> (green), <span class="appended">Appended</span> (pink), <span class="edited">Edited</span> (orange)</div>');
+                
+                // Create table
+                let table = $('<table class="table table-bordered"></table>');
+                let thead = $('<thead><tr><th>Name</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead>');
+                let tbody = $('<tbody></tbody>');
+                
+                // Add rows
                 previewRows.forEach(function(row) {
-                    html += `<tr><td>${row.name}</td><td>${row.category}</td><td>${row.old_config}</td><td>${row.new_config}</td></tr>`;
+                    let tr = $('<tr></tr>');
+                    tr.append('<td>' + row.name + '</td>');
+                    tr.append('<td>' + row.old_config + '</td>');
+                    tr.append('<td>' + row.new_config + '</td>'); // HTML color coding should work now
+                    tbody.append(tr);
                 });
-                html += '</tbody></table>';
-                $('#modalPreviewTableContainer').html(html);
+                
+                table.append(thead).append(tbody);
+                container.append(table);
+                
+                console.log('Table HTML created:', container.html());
             },
             error: function(xhr, status, error) {
                 alert('Error generating preview: ' + error);

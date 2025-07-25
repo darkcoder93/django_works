@@ -117,16 +117,16 @@ function setupModalEventHandlers() {
                 container.append('<div class="mb-2"><strong>Note:</strong> <span class="added">Added</span> (green), <span class="appended">Appended</span> (pink), <span class="edited">Edited</span> (orange)</div>');
                 
                 // Create table
-                let table = $('<table class="table table-bordered"></table>');
-                let thead = $('<thead><tr><th>Name</th><th>Old Config</th><th>New Config (Preview)</th></tr></thead>');
+                let table = $('<table class="table table-bordered table-sm" style="margin-bottom: 0; font-size: 0.875rem;"></table>');
+                let thead = $('<thead><tr><th style="width: 15%; padding: 0.5rem; word-wrap: break-word; max-width: 150px;">Name</th><th style="width: 42.5%; padding: 0.5rem; word-wrap: break-word; max-width: 300px;">Old Config</th><th style="width: 42.5%; padding: 0.5rem; word-wrap: break-word; max-width: 300px;">New Config (Preview)</th></tr></thead>');
                 let tbody = $('<tbody></tbody>');
                 
                 // Add rows
                 previewRows.forEach(function(row) {
                     let tr = $('<tr></tr>');
-                    tr.append('<td>' + row.name + '</td>');
-                    tr.append('<td>' + row.old_config + '</td>');
-                    tr.append('<td>' + row.new_config + '</td>'); // HTML color coding should work now
+                    tr.append('<td style="vertical-align: top; padding: 0.5rem; word-wrap: break-word; max-width: 150px; white-space: pre-wrap; overflow-wrap: break-word;">' + row.name + '</td>');
+                    tr.append('<td style="vertical-align: top; padding: 0.5rem; word-wrap: break-word; max-width: 300px; white-space: pre-wrap; overflow-wrap: break-word;">' + row.old_config + '</td>');
+                    tr.append('<td style="vertical-align: top; padding: 0.5rem; word-wrap: break-word; max-width: 300px; white-space: pre-wrap; overflow-wrap: break-word;">' + row.new_config + '</td>'); // HTML color coding should work now
                     tbody.append(tr);
                 });
                 

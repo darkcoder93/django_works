@@ -2,9 +2,16 @@
 let maxSections = 3;
 let constantCategories = ['config1', 'config2', 'config3', 'config4', 'config5', 'config6', 'config7', 'config8'];
 let table; // Global table reference
+let hasPreviewed = false; // Track if user has previewed current operations
 
 // Initialize the application when document is ready
 $(document).ready(function() {
+    // Check for success message from previous submission
+    if (sessionStorage.getItem('configUpdateSuccess') === 'true') {
+        alert('Configs updated successfully!');
+        sessionStorage.removeItem('configUpdateSuccess'); // Clear the flag
+    }
+    
     // Only essential initialization that needs to happen on page load
     initializeDataTable();
     initializeRowSelection();
@@ -59,6 +66,7 @@ function setupModalEventHandlers() {
         $('#configForm input[type="text"]').val('');
         $('#configForm input[type="checkbox"]').prop('checked', false);
         $('#configForm select').prop('selectedIndex', 0);
+        hasPreviewed = false; // Reset preview flag when modal is closed
     });
 
     // Add section
@@ -67,6 +75,7 @@ function setupModalEventHandlers() {
         if (currentSectionCount < maxSections) {
             $('#operationSections').append(createSection());
             updateSectionFields();
+            hasPreviewed = false; // Reset preview flag when section is added
         }
     });
     
@@ -76,6 +85,7 @@ function setupModalEventHandlers() {
         if (currentSectionCount > 1) {
             $('#operationSections .modal-section').last().remove();
             updateSectionFields();
+            hasPreviewed = false; // Reset preview flag when section is removed
         }
     });
     
@@ -83,6 +93,7 @@ function setupModalEventHandlers() {
     $('#resetBtn').off('click').on('click', function() {
         resetSections();
         $('#modalPreviewTableContainer').html('');
+        hasPreviewed = false; // Reset preview flag when reset is clicked
     });
 
     // Preview button
@@ -134,6 +145,9 @@ function setupModalEventHandlers() {
                 container.append(table);
                 
                 console.log('Table HTML created:', container.html());
+                
+                // Mark that preview has been done for current operations
+                hasPreviewed = true;
             },
             error: function(xhr, status, error) {
                 alert('Error generating preview: ' + error);
@@ -155,6 +169,12 @@ function setupModalEventHandlers() {
             return;
         }
 
+        // Check if user has previewed the current operations
+        if (!hasPreviewed) {
+            alert('Please preview the changes before submitting. Click the "Preview" button first.');
+            return;
+        }
+
         $.ajax({
             url: '/api/update/',
             method: 'POST',
@@ -163,11 +183,14 @@ function setupModalEventHandlers() {
             success: function(data) {
                 $('#configModal').modal('hide');
                 $('#modalPreviewTableContainer').html('');
-                updateTable();
-                alert('Configs updated successfully!');
+                hasPreviewed = false; // Reset preview flag
+                // Set success message in session storage before reload
+                sessionStorage.setItem('configUpdateSuccess', 'true');
+                // Reload the page to refresh all data
+                window.location.reload();
             },
             error: function(xhr, status, error) {
-                alert('Error updating configs: ' + error);
+                alert('Error updating configs: ' + error + '\n\nPlease try again or contact support if the issue persists.');
             }
         });
     });
@@ -175,10 +198,21 @@ function setupModalEventHandlers() {
     // Dynamic event handlers for form elements
     $(document).off('change', '.operation-select').on('change', '.operation-select', function() {
         updateSectionFields();
+        hasPreviewed = false; // Reset preview flag when operation changes
     });
     
     $(document).off('change', '.category-select').on('change', '.category-select', function() {
         updateSectionFields();
+        hasPreviewed = false; // Reset preview flag when category changes
+    });
+    
+    // Reset preview flag when key, value, or case sensitivity changes
+    $(document).off('input', '.key-input, .value-input').on('input', '.key-input, .value-input', function() {
+        hasPreviewed = false; // Reset preview flag when input changes
+    });
+    
+    $(document).off('change', '.case-checkbox').on('change', '.case-checkbox', function() {
+        hasPreviewed = false; // Reset preview flag when case sensitivity changes
     });
 }
 
@@ -242,11 +276,15 @@ function updateSectionFields() {
         let appendOption = $(this).find('.operation-select option[value="append"]');
         if (category === 'config8') {
             appendOption.show();
+            // For config8, make key read-only and set to "default_key"
+            $(this).find('.key-input').val('default_key').prop('readonly', true);
         } else {
             appendOption.hide();
             if (op === 'append') {
                 $(this).find('.operation-select').val('edit');
             }
+            // For other configs, make key editable
+            $(this).find('.key-input').prop('readonly', false);
         }
     });
     

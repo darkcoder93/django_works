@@ -1,6 +1,6 @@
 // Global variables and constants
 let maxSections = 3;
-let constantCategories = ['config1', 'config2', 'config3', 'config4', 'config5', 'config6', 'config7', 'config8'];
+let constantCategories = ['config1', 'config2', 'config3', 'config4', 'config5', 'config6', 'config7'];
 let table; // Global table reference
 let hasPreviewed = false; // Track if user has previewed current operations
 
@@ -206,10 +206,15 @@ function setupModalEventHandlers() {
     $(document).off('change', '.operation-select').on('change', '.operation-select', function() {
         let section = $(this).closest('.modal-section');
         let category = section.find('.category-select').val();
+        let operation = $(this).val();
         
-        // Clear key and value fields
-        section.find('.key-input').val('');
+        // Clear value field
         section.find('.value-input').val('');
+        
+        // Clear key field only if not config1 + append
+        if (!(category === 'config1' && operation === 'append')) {
+            section.find('.key-input').val('');
+        }
         
         updateSectionFields();
         hasPreviewed = false; // Reset preview flag when operation changes
@@ -218,10 +223,15 @@ function setupModalEventHandlers() {
     $(document).off('change', '.category-select').on('change', '.category-select', function() {
         let section = $(this).closest('.modal-section');
         let category = $(this).val();
+        let operation = section.find('.operation-select').val();
         
-        // Clear key and value fields
-        section.find('.key-input').val('');
+        // Clear value field
         section.find('.value-input').val('');
+        
+        // Clear key field only if not config1 + append
+        if (!(category === 'config1' && operation === 'append')) {
+            section.find('.key-input').val('');
+        }
         
         updateSectionFields();
         hasPreviewed = false; // Reset preview flag when category changes
@@ -246,38 +256,34 @@ function createSection() {
     
     let catSelect = '<select class="form-select category-select" name="category">';
     constantCategories.forEach(function(cat) {
-        let displayText = cat;
-        if (cat === 'config8') {
-            displayText = 'config8:default_key';
-        }
-        catSelect += `<option value="${cat}">${displayText}</option>`;
+        catSelect += `<option value="${cat}">${cat}</option>`;
     });
     catSelect += '</select>';
-    return `<div class="col-md-4 modal-section" style="margin-bottom: 1rem;">
-        <div class="card" style="padding: 1rem; height: 100%;">
-            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                <div style="flex: 1;">
+    return `<div class="col-12 modal-section" style="margin-bottom: 1rem;">
+        <div class="card" style="padding: 1rem;">
+            <div style="display: flex; gap: 0.75rem; align-items: end;">
+                <div style="flex: 1; min-width: 0;">
                     <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Category</label>
                     ${catSelect}
                 </div>
-                <div style="flex: 1;">
+                <div style="flex: 1; min-width: 0;">
                     <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Operation</label>
                     <select class="form-select operation-select" name="operation" style="width: 100%;">
                         ${operationOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('')}
                     </select>
                 </div>
-            </div>
-            <div style="margin-bottom: 1rem;">
-                <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Key</label>
-                <input type="text" class="form-control key-input" name="key" style="width: 100%;">
-            </div>
-            <div style="margin-bottom: 1rem;">
-                <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Value</label>
-                <input type="text" class="form-control value-input" name="value" style="width: 100%;">
-            </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input class="form-check-input case-checkbox" type="checkbox" name="case" style="margin: 0;">
-                <label style="margin: 0; font-size: 0.875rem;">Case Sensitive</label>
+                <div style="flex: 1; min-width: 0;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Key</label>
+                    <input type="text" class="form-control key-input" name="key" style="width: 100%;">
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Value</label>
+                    <input type="text" class="form-control value-input" name="value" style="width: 100%;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.5rem;">
+                    <input class="form-check-input case-checkbox" type="checkbox" name="case" style="margin: 0;">
+                    <label style="margin: 0; font-size: 0.875rem; white-space: nowrap;">Case</label>
+                </div>
             </div>
         </div>
     </div>`;
@@ -301,17 +307,26 @@ function updateSectionFields() {
         }
         
         let appendOption = $(this).find('.operation-select option[value="append"]');
-        if (category === 'config8') {
+        if (category === 'config1') {
             appendOption.show();
-            // For config8, make key read-only and set to "default_key"
-            $(this).find('.key-input').val('default_key').prop('readonly', true);
+            // For config1, make key read-only and set to "default_key" only when append is selected
+            if (op === 'append') {
+                $(this).find('.key-input').val('default_key').prop('readonly', true);
+                // For append operation, check case sensitivity and make it read-only
+                $(this).find('.case-checkbox').prop('checked', true).prop('disabled', true);
+            } else {
+                $(this).find('.key-input').val('').prop('readonly', false);
+                // For other operations, enable case sensitivity checkbox
+                $(this).find('.case-checkbox').prop('disabled', false);
+            }
         } else {
             appendOption.hide();
             if (op === 'append') {
                 $(this).find('.operation-select').val('edit');
             }
-            // For other configs, make key editable
+            // For other configs, make key editable and enable case sensitivity
             $(this).find('.key-input').prop('readonly', false);
+            $(this).find('.case-checkbox').prop('disabled', false);
         }
     });
     

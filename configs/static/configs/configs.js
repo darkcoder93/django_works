@@ -120,9 +120,14 @@ function setupModalEventHandlers() {
                 let container = $('#modalPreviewTableContainer');
                 
                 console.log('Preview data received:', data);
+                console.log('Container found:', container.length > 0);
+                console.log('Container current HTML:', container.html());
                 
                 // Clear container
                 container.empty();
+                
+                // Ensure container is visible
+                container.show();
                 
                 // Add note section
                 container.append('<div class="mb-2"><strong>Note:</strong> <span class="added">Added</span> (green), <span class="appended">Appended</span> (pink), <span class="edited">Edited</span> (orange)</div>');
@@ -145,6 +150,8 @@ function setupModalEventHandlers() {
                 container.append(table);
                 
                 console.log('Table HTML created:', container.html());
+                console.log('Container final HTML:', container.html());
+                console.log('Container is visible:', container.is(':visible'));
                 
                 // Mark that preview has been done for current operations
                 hasPreviewed = true;
@@ -197,11 +204,25 @@ function setupModalEventHandlers() {
 
     // Dynamic event handlers for form elements
     $(document).off('change', '.operation-select').on('change', '.operation-select', function() {
+        let section = $(this).closest('.modal-section');
+        let category = section.find('.category-select').val();
+        
+        // Clear key and value fields
+        section.find('.key-input').val('');
+        section.find('.value-input').val('');
+        
         updateSectionFields();
         hasPreviewed = false; // Reset preview flag when operation changes
     });
     
     $(document).off('change', '.category-select').on('change', '.category-select', function() {
+        let section = $(this).closest('.modal-section');
+        let category = $(this).val();
+        
+        // Clear key and value fields
+        section.find('.key-input').val('');
+        section.find('.value-input').val('');
+        
         updateSectionFields();
         hasPreviewed = false; // Reset preview flag when category changes
     });
@@ -225,32 +246,38 @@ function createSection() {
     
     let catSelect = '<select class="form-select category-select" name="category">';
     constantCategories.forEach(function(cat) {
-        catSelect += `<option value="${cat}">${cat}</option>`;
+        let displayText = cat;
+        if (cat === 'config8') {
+            displayText = 'config8:default_key';
+        }
+        catSelect += `<option value="${cat}">${displayText}</option>`;
     });
     catSelect += '</select>';
-    return `<div class="col-md-4 modal-section">
-        <div class="card p-2">
-            <div class="mb-2">
-                <label>Category</label>
-                ${catSelect}
+    return `<div class="col-md-4 modal-section" style="margin-bottom: 1rem;">
+        <div class="card" style="padding: 1rem; height: 100%;">
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Category</label>
+                    ${catSelect}
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Operation</label>
+                    <select class="form-select operation-select" name="operation" style="width: 100%;">
+                        ${operationOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('')}
+                    </select>
+                </div>
             </div>
-            <div class="mb-2">
-                <label>Operation</label>
-                <select class="form-select operation-select" name="operation">
-                    ${operationOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('')}
-                </select>
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Key</label>
+                <input type="text" class="form-control key-input" name="key" style="width: 100%;">
             </div>
-            <div class="mb-2 key-value-group">
-                <label>Key</label>
-                <input type="text" class="form-control key-input" name="key">
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Value</label>
+                <input type="text" class="form-control value-input" name="value" style="width: 100%;">
             </div>
-            <div class="mb-2 value-group">
-                <label>Value</label>
-                <input type="text" class="form-control value-input" name="value">
-            </div>
-            <div class="form-check">
-                <input class="form-check-input case-checkbox" type="checkbox" name="case">
-                <label class="form-check-label">Case Sensitive</label>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input class="form-check-input case-checkbox" type="checkbox" name="case" style="margin: 0;">
+                <label style="margin: 0; font-size: 0.875rem;">Case Sensitive</label>
             </div>
         </div>
     </div>`;

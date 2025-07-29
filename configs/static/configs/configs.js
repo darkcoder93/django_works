@@ -105,6 +105,9 @@ function setupModalEventHandlers() {
         }
         
         let operations = collectOperations();
+        if (!operations) {
+            return; // Validation failed, error already shown
+        }
         if (operations.length === 0) {
             alert('No operations defined.');
             return;
@@ -157,7 +160,11 @@ function setupModalEventHandlers() {
                 hasPreviewed = true;
             },
             error: function(xhr, status, error) {
-                alert('Error generating preview: ' + error);
+                let errorMessage = 'Error generating preview: ' + error;
+                if (xhr.responseJSON && xhr.responseJSON.details) {
+                    errorMessage += '\n\nValidation errors:\n' + xhr.responseJSON.details.join('\n');
+                }
+                alert(errorMessage);
             }
         });
     });
@@ -171,6 +178,9 @@ function setupModalEventHandlers() {
         }
         
         let operations = collectOperations();
+        if (!operations) {
+            return; // Validation failed, error already shown
+        }
         if (operations.length === 0) {
             alert('No operations defined.');
             return;
@@ -197,7 +207,12 @@ function setupModalEventHandlers() {
                 window.location.reload();
             },
             error: function(xhr, status, error) {
-                alert('Error updating configs: ' + error + '\n\nPlease try again or contact support if the issue persists.');
+                let errorMessage = 'Error updating configs: ' + error;
+                if (xhr.responseJSON && xhr.responseJSON.details) {
+                    errorMessage += '\n\nValidation errors:\n' + xhr.responseJSON.details.join('\n');
+                }
+                errorMessage += '\n\nPlease try again or contact support if the issue persists.';
+                alert(errorMessage);
             }
         });
     });
@@ -349,16 +364,59 @@ function updateButtonVisibility() {
     }
 }
 
+function validateOperation(category, op, key, value, caseSensitive) {
+    // Strip whitespace
+    key = key.trim();
+    value = value.trim();
+    
+    // Check for empty key
+    if (!key) {
+        return { isValid: false, error: "Key cannot be empty" };
+    }
+    
+    // Check for invalid characters in key
+    if (/[;\s"'\\]/.test(key)) {
+        return { isValid: false, error: `Key '${key}' contains invalid characters (spaces, semicolons, quotes, or backslashes)` };
+    }
+    
+    // Check for invalid characters in value (only for edit and append operations)
+    if (op !== 'delete' && /[;"'\\]/.test(value)) {
+        return { isValid: false, error: `Value '${value}' contains invalid characters (semicolons, quotes, or backslashes)` };
+    }
+    
+    // Check for empty value in edit/append operations
+    if (op !== 'delete' && !value) {
+        return { isValid: false, error: "Value cannot be empty for edit and append operations" };
+    }
+    
+    return { isValid: true, error: "" };
+}
+
 function collectOperations() {
     let operations = [];
-    $('#operationSections .modal-section').each(function() {
+    let validationErrors = [];
+    
+    $('#operationSections .modal-section').each(function(index) {
         let category = $(this).find('.category-select').val();
         let op = $(this).find('.operation-select').val();
         let key = $(this).find('.key-input').val();
         let value = $(this).find('.value-input').val();
         let caseSensitive = $(this).find('.case-checkbox').is(':checked');
-        operations.push({ category, op, key, value, caseSensitive });
+        
+        // Validate the operation
+        let validation = validateOperation(category, op, key, value, caseSensitive);
+        if (!validation.isValid) {
+            validationErrors.push(`Section ${index + 1}: ${validation.error}`);
+        } else {
+            operations.push({ category, op, key, value, caseSensitive });
+        }
     });
+    
+    if (validationErrors.length > 0) {
+        alert('Validation errors:\n' + validationErrors.join('\n'));
+        return null;
+    }
+    
     return operations;
 }
 

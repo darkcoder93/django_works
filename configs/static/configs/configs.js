@@ -223,7 +223,7 @@ function setupModalEventHandlers() {
         let category = section.find('.category-select').val();
         let operation = $(this).val();
         
-        // Clear value field
+        // Clear value field in this section only
         section.find('.value-input').val('');
         
         // Clear key field only if not config1 + append
@@ -231,10 +231,10 @@ function setupModalEventHandlers() {
             section.find('.key-input').val('');
         }
         
-        updateSectionFields();
+        updateSectionFields(section);
         hasPreviewed = false; // Reset preview flag when operation changes
         
-        // Clear any existing validation errors
+        // Clear any existing validation errors in this section only
         section.find('.validation-error').remove();
         section.find('.form-control').removeClass('is-invalid');
     });
@@ -244,7 +244,7 @@ function setupModalEventHandlers() {
         let category = $(this).val();
         let operation = section.find('.operation-select').val();
         
-        // Clear value field
+        // Clear value field in this section only
         section.find('.value-input').val('');
         
         // Clear key field only if not config1 + append
@@ -252,10 +252,10 @@ function setupModalEventHandlers() {
             section.find('.key-input').val('');
         }
         
-        updateSectionFields();
+        updateSectionFields(section);
         hasPreviewed = false; // Reset preview flag when category changes
         
-        // Clear any existing validation errors
+        // Clear any existing validation errors in this section only
         section.find('.validation-error').remove();
         section.find('.form-control').removeClass('is-invalid');
     });
@@ -265,9 +265,15 @@ function setupModalEventHandlers() {
         let input = $(this);
         let value = input.val();
         
-        // Check for spaces in the input
-        if (value.includes(' ')) {
-            alert('Spaces are not allowed in this field. The text will be cleared.');
+        // Check for invalid characters (spaces, semicolons, quotes)
+        if (value.includes(' ') || value.includes(';') || value.includes('"') || value.includes("'")) {
+            let invalidChars = [];
+            if (value.includes(' ')) invalidChars.push('spaces');
+            if (value.includes(';')) invalidChars.push('semicolons');
+            if (value.includes('"')) invalidChars.push('double quotes');
+            if (value.includes("'")) invalidChars.push('single quotes');
+            
+            alert(`The following characters are not allowed: ${invalidChars.join(', ')}. The text will be cleared.`);
             input.val(''); // Clear the input
             hasPreviewed = false;
             validateSectionInRealTime($(this).closest('.modal-section'));
@@ -332,8 +338,10 @@ function resetSections() {
     updateSectionFields();
 }
 
-function updateSectionFields() {
-    $('#operationSections .modal-section').each(function() {
+function updateSectionFields(specificSection = null) {
+    let sectionsToUpdate = specificSection ? [specificSection] : $('#operationSections .modal-section');
+    
+    sectionsToUpdate.each(function() {
         let op = $(this).find('.operation-select').val();
         let category = $(this).find('.category-select').val();
         
@@ -352,7 +360,8 @@ function updateSectionFields() {
                 // For append operation, check case sensitivity and make it read-only
                 $(this).find('.case-checkbox').prop('checked', true).prop('disabled', true);
             } else {
-                $(this).find('.key-input').val('').prop('readonly', false);
+                // Don't clear the key value, just make it editable
+                $(this).find('.key-input').prop('readonly', false);
                 // For other operations, enable case sensitivity checkbox
                 $(this).find('.case-checkbox').prop('disabled', false);
             }
@@ -398,12 +407,26 @@ function validateOperation(category, op, key, value, caseSensitive) {
     
     // Check for invalid characters in key
     if (/[;\s"'\\]/.test(key)) {
-        return { isValid: false, error: `Key '${key}' contains invalid characters (spaces, semicolons, quotes, or backslashes)` };
+        let invalidChars = [];
+        if (key.includes(' ')) invalidChars.push('spaces');
+        if (key.includes(';')) invalidChars.push('semicolons');
+        if (key.includes('"')) invalidChars.push('double quotes');
+        if (key.includes("'")) invalidChars.push('single quotes');
+        if (key.includes('\\')) invalidChars.push('backslashes');
+        
+        return { isValid: false, error: `Key '${key}' contains invalid characters: ${invalidChars.join(', ')}` };
     }
     
     // Check for invalid characters in value (only for edit and append operations)
     if (op !== 'delete' && /[;\s"'\\]/.test(value)) {
-        return { isValid: false, error: `Value '${value}' contains invalid characters (spaces, semicolons, quotes, or backslashes)` };
+        let invalidChars = [];
+        if (value.includes(' ')) invalidChars.push('spaces');
+        if (value.includes(';')) invalidChars.push('semicolons');
+        if (value.includes('"')) invalidChars.push('double quotes');
+        if (value.includes("'")) invalidChars.push('single quotes');
+        if (value.includes('\\')) invalidChars.push('backslashes');
+        
+        return { isValid: false, error: `Value '${value}' contains invalid characters: ${invalidChars.join(', ')}` };
     }
     
     // Check for empty value in edit/append operations

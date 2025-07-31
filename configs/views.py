@@ -10,84 +10,33 @@ def index(request):
     return render(request, 'configs/index.html')
 
 
-def validate_and_sanitize_key_value(key, value):
+def sanitize_key_value(key, value):
     """
-    Validate and sanitize key-value pairs.
-    Returns (is_valid, sanitized_key, sanitized_value, error_message)
+    Sanitize key-value pairs (frontend validation already handled invalid data).
+    Returns (sanitized_key, sanitized_value)
     """
     # Strip whitespace
-    key = key.strip() if key else ""
-    value = value.strip() if value else ""
+    sanitized_key = key.strip() if key else ""
+    sanitized_value = value.strip() if value else ""
     
-    # Check if key is empty or contains invalid characters
-    if not key:
-        return False, "", "", "Key cannot be empty"
-    
-    # Check for invalid characters in key (no spaces, semicolons, quotes)
-    if re.search(r'[;\s"\'\\]', key):
-        return False, "", "", f"Key '{key}' contains invalid characters (spaces, semicolons, quotes, or backslashes)"
-    
-    # Check for invalid characters in value (no semicolons, quotes)
-    if re.search(r'[;"\'\\]', value):
-        return False, "", "", f"Value '{value}' contains invalid characters (semicolons, quotes, or backslashes)"
-    
-    return True, key, value, ""
+    return sanitized_key, sanitized_value
 
 
-def validate_operation(operation):
+def sanitize_operation(operation):
     """
-    Validate a single operation.
-    Returns (is_valid, sanitized_operation, error_message)
+    Sanitize a single operation (frontend validation already handled invalid data).
+    Returns sanitized_operation
     """
-    required_fields = ['category', 'op', 'key', 'value', 'caseSensitive']
+    # Basic sanitization - frontend validation already handled the rest
+    sanitized_operation = {
+        'category': operation['category'].strip(),
+        'op': operation['op'].strip(),
+        'key': operation['key'].strip() if operation['key'] else "",
+        'value': operation['value'].strip() if operation['value'] else "",
+        'caseSensitive': bool(operation['caseSensitive'])
+    }
     
-    # Check required fields
-    for field in required_fields:
-        if field not in operation:
-            return False, None, f"Missing required field: {field}"
-    
-    # Validate category
-    category = operation['category'].strip()
-    if not category:
-        return False, None, "Category cannot be empty"
-    
-    # Validate operation type
-    op = operation['op'].strip()
-    if op not in ['edit', 'append', 'delete']:
-        return False, None, f"Invalid operation type: {op}"
-    
-    # Validate key and value based on operation
-    key = operation['key'].strip() if operation['key'] else ""
-    value = operation['value'].strip() if operation['value'] else ""
-    
-    if op == 'delete':
-        # For delete, only key is required
-        is_valid, sanitized_key, _, error_msg = validate_and_sanitize_key_value(key, "")
-        if not is_valid:
-            return False, None, f"Delete operation: {error_msg}"
-        
-        sanitized_operation = {
-            'category': category,
-            'op': op,
-            'key': sanitized_key,
-            'value': '',
-            'caseSensitive': bool(operation['caseSensitive'])
-        }
-    else:
-        # For edit and append, both key and value are required
-        is_valid, sanitized_key, sanitized_value, error_msg = validate_and_sanitize_key_value(key, value)
-        if not is_valid:
-            return False, None, f"{op.capitalize()} operation: {error_msg}"
-        
-        sanitized_operation = {
-            'category': category,
-            'op': op,
-            'key': sanitized_key,
-            'value': sanitized_value,
-            'caseSensitive': bool(operation['caseSensitive'])
-        }
-    
-    return True, sanitized_operation, ""
+    return sanitized_operation
 
 
 def api_get_configs(request):
@@ -114,11 +63,10 @@ def parse_config_string(config_str):
                 parts = pair.split(' ', 1)
                 if len(parts) == 2:
                     k, v = parts
-                    # Validate and sanitize the key-value pair
-                    is_valid, sanitized_key, sanitized_value, _ = validate_and_sanitize_key_value(k, v)
-                    if is_valid:
+                    # Sanitize the key-value pair
+                    sanitized_key, sanitized_value = sanitize_key_value(k, v)
+                    if sanitized_key:  # Only add if key is not empty
                         obj[sanitized_key] = sanitized_value
-                    # Skip invalid key-value pairs silently
                 # Skip malformed pairs (no space separator)
     return obj
 
@@ -129,11 +77,11 @@ def stringify_config_object(obj):
     if not obj:
         return ""  # Empty config returns empty string (no semicolon)
     
-    # Filter out any invalid key-value pairs and join with semicolon
+    # Sanitize and filter key-value pairs
     valid_pairs = []
     for k, v in obj.items():
-        is_valid, sanitized_key, sanitized_value, _ = validate_and_sanitize_key_value(k, v)
-        if is_valid:
+        sanitized_key, sanitized_value = sanitize_key_value(k, v)
+        if sanitized_key:  # Only include if key is not empty
             valid_pairs.append(f"{sanitized_key} {sanitized_value}")
     
     if not valid_pairs:
@@ -324,22 +272,10 @@ def api_preview_configs(request):
         names = body.get('names', [])
         operations = body.get('operations', [])
 
-        # Validate operations first
-        validated_operations = []
-        validation_errors = []
-        
-        for i, operation in enumerate(operations):
-            is_valid, sanitized_operation, error_msg = validate_operation(operation)
-            if is_valid:
-                validated_operations.append(sanitized_operation)
-            else:
-                validation_errors.append(f"Operation {i+1}: {error_msg}")
-        
-        if validation_errors:
-            return JsonResponse({
-                'error': 'Validation failed',
-                'details': validation_errors
-            }, status=400)
+        # Sanitize operations (frontend validation already handled invalid data)
+        sanitized_operations = []
+        for operation in operations:
+            sanitized_operations.append(sanitize_operation(operation))
 
         preview_rows = []
 
@@ -355,7 +291,7 @@ def api_preview_configs(request):
 
             # Group operations by category
             category_operations = {}
-            for op in validated_operations:
+            for op in sanitized_operations:
                 category = op['category']
                 if category not in category_operations:
                     category_operations[category] = []
@@ -402,22 +338,10 @@ def api_update_configs(request):
         names = body.get('names', [])
         operations = body.get('operations', [])
         
-        # Validate operations first
-        validated_operations = []
-        validation_errors = []
-        
-        for i, operation in enumerate(operations):
-            is_valid, sanitized_operation, error_msg = validate_operation(operation)
-            if is_valid:
-                validated_operations.append(sanitized_operation)
-            else:
-                validation_errors.append(f"Operation {i+1}: {error_msg}")
-        
-        if validation_errors:
-            return JsonResponse({
-                'error': 'Validation failed',
-                'details': validation_errors
-            }, status=400)
+        # Sanitize operations (frontend validation already handled invalid data)
+        sanitized_operations = []
+        for operation in operations:
+            sanitized_operations.append(sanitize_operation(operation))
         
         results = []
         
@@ -433,7 +357,7 @@ def api_update_configs(request):
             
             # Group operations by category
             category_operations = {}
-            for op in validated_operations:
+            for op in sanitized_operations:
                 category = op['category']
                 if category not in category_operations:
                     category_operations[category] = []

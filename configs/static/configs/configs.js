@@ -467,7 +467,7 @@ function validateOperationSection(section) {
 function collectOperations() {
     let operations = [];
     let validationErrors = [];
-    let emptySections = [];
+    let removedSections = [];
     
     $('#operationSections .modal-section').each(function(index) {
         let section = $(this);
@@ -479,7 +479,8 @@ function collectOperations() {
         
         // Check if this section is completely empty (no key entered)
         if (!key) {
-            emptySections.push(index + 1);
+            removedSections.push(index + 1);
+            section.remove(); // Remove the empty section from DOM
             return; // Skip this section entirely
         }
         
@@ -498,19 +499,20 @@ function collectOperations() {
         return null;
     }
     
-    // Show warning about empty sections
-    if (emptySections.length > 0) {
-        let warningMessage = `The following sections are empty and will be ignored:\nSection(s): ${emptySections.join(', ')}`;
+    // Show message about removed sections
+    if (removedSections.length > 0) {
+        let message = `Section(s) ${removedSections.join(', ')} were removed because they had no key or value.`;
         if (operations.length === 0) {
-            alert('No valid operations found. Please fill in at least one operation section.\n\n' + warningMessage);
+            alert('No valid operations found. Please fill in at least one operation section.\n\n' + message);
             return null;
         } else {
-            // Show warning but continue with valid operations
-            if (!confirm(warningMessage + '\n\nContinue with the valid operations?')) {
-                return null;
-            }
+            // Show message but continue with valid operations
+            alert(message + '\n\nContinuing with the valid operations.');
         }
     }
+    
+    // Update button visibility after removing sections
+    updateButtonVisibility();
     
     return operations;
 }

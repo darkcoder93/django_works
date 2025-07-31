@@ -233,6 +233,10 @@ function setupModalEventHandlers() {
         
         updateSectionFields();
         hasPreviewed = false; // Reset preview flag when operation changes
+        
+        // Clear any existing validation errors
+        section.find('.validation-error').remove();
+        section.find('.form-control').removeClass('is-invalid');
     });
     
     $(document).off('change', '.category-select').on('change', '.category-select', function() {
@@ -250,15 +254,33 @@ function setupModalEventHandlers() {
         
         updateSectionFields();
         hasPreviewed = false; // Reset preview flag when category changes
+        
+        // Clear any existing validation errors
+        section.find('.validation-error').remove();
+        section.find('.form-control').removeClass('is-invalid');
     });
     
     // Reset preview flag when key, value, or case sensitivity changes
     $(document).off('input', '.key-input, .value-input').on('input', '.key-input, .value-input', function() {
+        let input = $(this);
+        let value = input.val();
+        
+        // Check for spaces in the input
+        if (value.includes(' ')) {
+            alert('Spaces are not allowed in this field. The text will be cleared.');
+            input.val(''); // Clear the input
+            hasPreviewed = false;
+            validateSectionInRealTime($(this).closest('.modal-section'));
+            return;
+        }
+        
         hasPreviewed = false; // Reset preview flag when input changes
+        validateSectionInRealTime($(this).closest('.modal-section'));
     });
     
     $(document).off('change', '.case-checkbox').on('change', '.case-checkbox', function() {
         hasPreviewed = false; // Reset preview flag when case sensitivity changes
+        validateSectionInRealTime($(this).closest('.modal-section'));
     });
 }
 
@@ -274,8 +296,8 @@ function createSection() {
         catSelect += `<option value="${cat}">${cat}</option>`;
     });
     catSelect += '</select>';
-    return `<div class="col-12 modal-section" style="margin-bottom: 1rem;">
-        <div class="card" style="padding: 1rem;">
+    return `<div class="col-12 modal-section" style="margin-bottom: 0.5rem;">
+        <div class="card" style="padding: 0.75rem;">
             <div style="display: flex; gap: 0.75rem; align-items: end;">
                 <div style="flex: 1; min-width: 0;">
                     <label style="display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem;">Category</label>
@@ -380,8 +402,8 @@ function validateOperation(category, op, key, value, caseSensitive) {
     }
     
     // Check for invalid characters in value (only for edit and append operations)
-    if (op !== 'delete' && /[;"'\\]/.test(value)) {
-        return { isValid: false, error: `Value '${value}' contains invalid characters (semicolons, quotes, or backslashes)` };
+    if (op !== 'delete' && /[;\s"'\\]/.test(value)) {
+        return { isValid: false, error: `Value '${value}' contains invalid characters (spaces, semicolons, quotes, or backslashes)` };
     }
     
     // Check for empty value in edit/append operations
@@ -392,19 +414,77 @@ function validateOperation(category, op, key, value, caseSensitive) {
     return { isValid: true, error: "" };
 }
 
+function validateSectionInRealTime(section) {
+    let validation = validateOperationSection(section);
+    let errorDiv = section.find('.validation-error');
+    
+    // Remove existing error message
+    if (errorDiv.length > 0) {
+        errorDiv.remove();
+    }
+    
+    // Remove error styling
+    section.find('.form-control').removeClass('is-invalid');
+    
+    if (!validation.isValid) {
+        // Add error styling to inputs
+        let keyInput = section.find('.key-input');
+        let valueInput = section.find('.value-input');
+        
+        if (!keyInput.val().trim()) {
+            keyInput.addClass('is-invalid');
+        }
+        if (section.find('.operation-select').val() !== 'delete' && !valueInput.val().trim()) {
+            valueInput.addClass('is-invalid');
+        }
+        
+        // Add error message
+        let errorHtml = `<div class="validation-error text-danger" style="font-size: 0.75rem; margin-top: 0.25rem;">${validation.error}</div>`;
+        section.find('.card').append(errorHtml);
+    }
+}
+
+function validateOperationSection(section) {
+    let category = section.find('.category-select').val();
+    let op = section.find('.operation-select').val();
+    let key = section.find('.key-input').val().trim();
+    let value = section.find('.value-input').val().trim();
+    let caseSensitive = section.find('.case-checkbox').is(':checked');
+    
+    // Basic validation - check if required fields are filled
+    if (!key) {
+        return { isValid: false, error: "Key is required" };
+    }
+    
+    if (op !== 'delete' && !value) {
+        return { isValid: false, error: "Value is required for edit and append operations" };
+    }
+    
+    // Detailed validation
+    return validateOperation(category, op, key, value, caseSensitive);
+}
+
 function collectOperations() {
     let operations = [];
     let validationErrors = [];
+    let emptySections = [];
     
     $('#operationSections .modal-section').each(function(index) {
-        let category = $(this).find('.category-select').val();
-        let op = $(this).find('.operation-select').val();
-        let key = $(this).find('.key-input').val();
-        let value = $(this).find('.value-input').val();
-        let caseSensitive = $(this).find('.case-checkbox').is(':checked');
+        let section = $(this);
+        let category = section.find('.category-select').val();
+        let op = section.find('.operation-select').val();
+        let key = section.find('.key-input').val().trim();
+        let value = section.find('.value-input').val().trim();
+        let caseSensitive = section.find('.case-checkbox').is(':checked');
+        
+        // Check if this section is completely empty (no key entered)
+        if (!key) {
+            emptySections.push(index + 1);
+            return; // Skip this section entirely
+        }
         
         // Validate the operation
-        let validation = validateOperation(category, op, key, value, caseSensitive);
+        let validation = validateOperationSection(section);
         if (!validation.isValid) {
             validationErrors.push(`Section ${index + 1}: ${validation.error}`);
         } else {
@@ -412,9 +492,24 @@ function collectOperations() {
         }
     });
     
+    // Show validation errors if any
     if (validationErrors.length > 0) {
         alert('Validation errors:\n' + validationErrors.join('\n'));
         return null;
+    }
+    
+    // Show warning about empty sections
+    if (emptySections.length > 0) {
+        let warningMessage = `The following sections are empty and will be ignored:\nSection(s): ${emptySections.join(', ')}`;
+        if (operations.length === 0) {
+            alert('No valid operations found. Please fill in at least one operation section.\n\n' + warningMessage);
+            return null;
+        } else {
+            // Show warning but continue with valid operations
+            if (!confirm(warningMessage + '\n\nContinue with the valid operations?')) {
+                return null;
+            }
+        }
     }
     
     return operations;
